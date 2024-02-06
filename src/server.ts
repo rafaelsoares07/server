@@ -1,60 +1,67 @@
-import express, { Application } from "express"
-import http from "http"
-import { Server, Socket } from "socket.io"
+import express, { Application, Request, Response } from "express";
+import http from "http";
+import { Server, Socket } from "socket.io";
+import * as AuthController from "./controllers/authController";
+import { JoiValidationMiddleware } from "./middlewares/JoiValidationMiddleware";
+import { signInShema, signUpShema } from "./schemas/authSchemas";
+import cors from "cors"; // Importe o pacote cors
 
 class App {
-    private app: Application
-    private http: http.Server
-    private io: Server
-    private clients: String[]
-    private messagens: Object[]
+    private app: Application;
+    private http: http.Server;
+    private io: Server;
+    private clients: String[];
+    private messagens: Object[];
 
     constructor() {
-        this.app = express()
-        this.http = http.createServer(this.app)
-        this.io = new Server(this.http)
-        this.listenSocket()
-        this.clients = []
-        this.messagens = []
-
+        this.app = express();
+        this.http = http.createServer(this.app);
+        this.io = new Server(this.http);
+        this.listenSocket();
+        this.clients = [];
+        this.messagens = [];
+        this.setupRoutes();
     }
 
     listenServer() {
-        this.http.listen(3000, () => console.log("SERVIDOR ATIVO: "))
+        this.http.listen(3000, () => console.log("SERVIDOR ATIVO: "));
     }
 
     listenSocket() {
         this.io.on("connection", (socket) => {
-            console.log("USUÁRIO CONECTADO: " + socket.id)
+            console.log("USUÁRIO CONECTADO: " + socket.id);
 
-            this.handleInicializeSetup(socket)
+            this.handleNumberOfClientsConected();
+
+            this.handleInicializeSetup(socket);
 
             socket.on("send-message",(data)=>{
                 const now = new Date();
                 const time = `${now.getHours()}:${now.getMinutes()}`;
           
-                console.log(data)
+                console.log(data);
                 let message = {
                     id:socket.id,
                     text:data,
                     time:time
-                }
-                this.messagens = [...this.messagens, message]
-                this.io.sockets.emit("update-mesagens",this.messagens)
-            })
+                };
+                this.messagens = [...this.messagens, message];
+                this.io.sockets.emit("update-mesagens",this.messagens);
+            });
 
-            this.handleDisconectSocket(socket)
-        })
+            this.handleDisconectSocket(socket);
+        });
     }
 
     handleNumberOfClientsConected() {
-        this.io.sockets.emit("handleNumberOfClientsConected", this.clients)
+        const numClients = this.io.sockets.sockets.size;
+        this.io.sockets.emit("handleNumberOfClientsConected", numClients);
     }
 
     handleInicializeSetup(socket:Socket){
-        this.clients.push(socket.id)
-        console.log(this.clients)
-        this.handleNumberOfClientsConected()
+        this.clients.push(socket.id);
+        console.log(this.clients);
+        this.handleNumberOfClientsConected();
     }
 
     handleDisconectSocket(socket: Socket) {
@@ -70,13 +77,20 @@ class App {
                 this.clients.splice(index, 1);
                 console.log("CLIENTE REMOVIDO DA LISTA DOS ATIVOS");
             }
-            console.log(this.clients)
-            this.handleNumberOfClientsConected()
+            console.log(this.clients);
+            this.handleNumberOfClientsConected();
         });
+    }
+
+    setupRoutes(){
+        this.app.use(cors());
+        this.app.use(express.json());
+        this.app.post("/signin",JoiValidationMiddleware(signInShema),AuthController.signInUser);
+        this.app.post("/signup",JoiValidationMiddleware(signUpShema),AuthController.signUpUser);
     }
 
 
 }
-const app = new App()
+const app = new App();
 
-app.listenServer()
+app.listenServer();
