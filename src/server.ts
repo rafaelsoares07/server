@@ -12,6 +12,7 @@ class App {
     private io: Server;
     private clients: String[];
     private messagens: Object[];
+    private filaDeConexao: String[];
 
     constructor() {
         this.app = express();
@@ -20,6 +21,7 @@ class App {
         this.listenSocket();
         this.clients = [];
         this.messagens = [];
+        this.filaDeConexao = [];
         this.setupRoutes();
     }
 
@@ -49,8 +51,38 @@ class App {
                 this.io.sockets.emit("update-mesagens",this.messagens);
             });
 
+            socket.on("conectar-na-fila", () => {
+                console.log("Usuário solicita conexão na fila:", socket.id);
+                this.filaDeConexao.push(socket.id); // Adiciona o usuário à fila
+
+                // Tenta emparelhar usuários se houver pelo menos dois na fila
+                if (this.filaDeConexao.length >= 2) {
+                    this.emparelharUsuarios();
+                }
+            });
+
             this.handleDisconectSocket(socket);
         });
+    }
+
+    emparelharUsuarios() {
+        // Verifica se há pelo menos dois usuários na fila
+        if (this.filaDeConexao.length >= 2) {
+            const usuario1 = this.filaDeConexao.shift(); // Remove o primeiro usuário da fila
+            const usuario2 = this.filaDeConexao.shift(); // Remove o segundo usuário da fila
+
+            if (usuario1 && usuario2) {
+                // Emitir evento para ambos os usuários informando que foram conectados
+                this.io.to(usuario1.toString()).emit("parceiro-encontrado", usuario2);
+                this.io.to(usuario2.toString()).emit("parceiro-encontrado", usuario1);
+
+                console.log("Usuários emparelhados:", usuario1, usuario2);
+            } else {
+                console.log("Erro ao emparelhar usuários: usuário não encontrado.");
+            }
+        } else {
+            console.log("A fila de conexão não possui usuários suficientes para emparelhamento.");
+        }
     }
 
     handleNumberOfClientsConected() {
@@ -59,7 +91,7 @@ class App {
     }
 
     handleInicializeSetup(socket:Socket){
-        this.clients.push(socket.id);
+        this.clients.push(socket.id.toString());
         console.log(this.clients);
         this.handleNumberOfClientsConected();
     }
@@ -78,6 +110,7 @@ class App {
                 console.log("CLIENTE REMOVIDO DA LISTA DOS ATIVOS");
             }
             console.log(this.clients);
+
             this.handleNumberOfClientsConected();
         });
     }
